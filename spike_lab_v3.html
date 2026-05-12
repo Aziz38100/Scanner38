@@ -118,7 +118,12 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;mi
     <div class="pill"><div class="dot" id="dot"></div><span id="cTxt" style="font-size:9px;margin-left:3px">OFF</span></div>
     <button class="btn btn-go" id="btnGo" onclick="startAll()">▶ DÉMARRER</button>
     <button class="btn btn-stop" id="btnStop" onclick="stopAll()" style="display:none">■ ARRÊTER</button>
+    <button class="btn" style="background:linear-gradient(90deg,#ff6600,#ffaa00);color:#000" onclick="analyseOllama()">🤖 ANALYSE IA</button>
   </div>
+</div>
+<div id="ollamaBox" style="display:none;padding:12px;background:#050d14;border-bottom:1px solid var(--border)">
+  <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--p);margin-bottom:6px;letter-spacing:2px">🤖 ANALYSE OLLAMA — IA LOCALE</div>
+  <div id="ollamaText" style="font-size:11px;line-height:1.7;color:var(--text);background:#060f18;border:1px solid var(--border);border-radius:6px;padding:10px;white-space:pre-wrap">En attente...</div>
 </div>
 
 <div class="pgrid" id="pgrid"></div>
@@ -558,7 +563,62 @@ function stopAll(){
   document.getElementById('cTxt').textContent='OFF';
 }
 
-buildUI();startClock();
+async function analyseOllama(){
+  document.getElementById('ollamaBox').style.display='block';
+  document.getElementById('ollamaText').textContent='⏳ Analyse en cours...';
+
+  let aH={},aT={};
+  IND.forEach(i=>{aH[i.id]=0;aT[i.id]=0;});
+  PAIRS.forEach(p=>{let s=ST[p.id];if(!s)return;IND.forEach(i=>{aH[i.id]+=s.ih[i.id];aT[i.id]+=s.it[i.id];});});
+  
+  let indR=IND.map(i=>{
+    let pct=aT[i.id]>0?Math.round(aH[i.id]/aT[i.id]*100):0;
+    return `${i.n}: ${pct}% (${aH[i.id]}/${aT[i.id]})`;
+  }).join('\n');
+
+  let pairR=PAIRS.map(p=>{
+    let s=ST[p.id];
+    if(!s)return '';
+    let pct=Math.min(99,Math.round(s.tss/p.max*100));
+    return `${p.sym}: ${s.spikes} spikes | compteur ${pct}% | direction ${s.direction===1?'HAUSSE':s.direction===-1?'BAISSE':'NEUTRE'}`;
+  }).join('\n');
+
+  let prompt=`Tu es un expert en trading des Synthetic Indices Deriv (Boom/Crash). Réponds en français.
+
+DONNÉES DU SCANNER:
+Ticks total: ${gT} | Spikes: ${gS} | Scalps: ${gSc}
+
+ÉTAT ACTUEL DES PAIRES:
+${pairR}
+
+5 INDICATEURS (état 50 ticks AVANT chaque spike):
+${indR}
+
+Donne-moi:
+1. Quelle paire trader maintenant et pourquoi
+2. Signal clair: SCALP ou attendre SPIKE
+3. Direction: BUY ou SELL
+4. Niveau de confiance en %
+5. Conseil rapide en 1 phrase`;
+
+  try{
+    let res=await fetch('http://localhost:11434/api/generate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'llama3',
+        prompt:prompt,
+        stream:false
+      })
+    });
+    let data=await res.json();
+    document.getElementById('ollamaText').textContent=data.response||'Pas de réponse';
+  }catch(err){
+    document.getElementById('ollamaText').textContent='❌ Erreur: Ollama pas lancé.\n\nDans le Terminal tape:\nollama serve\n\nPuis reclique ANALYSE IA';
+  }
+}
+
+
 </script>
 </body>
 </html>
